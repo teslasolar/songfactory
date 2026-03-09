@@ -1,12 +1,17 @@
 /**
- * Auth module — OAuth flows for YouTube (Google), Spotify, and DistroKid.
+ * Auth module — handles all service authentication.
  *
- * Since we're running in the browser (GitHub Pages), we use:
- * - Google: OAuth 2.0 implicit flow via Google Identity Services
- * - Spotify: OAuth 2.0 PKCE flow (no server/secret needed)
- * - DistroKid: Session detection via local CLI server (no public API/OAuth)
+ * Three tiers of access:
+ * 1. NO-AUTH (build-injected secrets via CONFIG):
+ *    - YouTube: API key → public channel data, video listings
+ *    - Spotify: Client Credentials → public search, artist/album data
  *
- * All tokens are stored in localStorage with expiry tracking.
+ * 2. OAUTH (user clicks "Sign in"):
+ *    - Google: OAuth 2.0 implicit → private videos, user's own channel auto-detect
+ *    - Spotify: PKCE flow → user profile, personalized data
+ *
+ * 3. SESSION (manual):
+ *    - DistroKid: user logs in via popup, local CLI uses browser cookies
  */
 const Auth = (() => {
   const STORAGE = {
@@ -18,14 +23,38 @@ const Auth = (() => {
     spotifyUser: 'sf_spotify_user',
     spotifyRefresh: 'sf_spotify_refresh',
     spotifyCodeVerifier: 'sf_spotify_code_verifier',
+    spotifyAppToken: 'sf_spotify_app_token',
+    spotifyAppExpiry: 'sf_spotify_app_expiry',
     dkConnected: 'sf_dk_connected',
     googleClientId: 'sf_google_client_id',
     spotifyClientId: 'sf_spotify_client_id',
   };
 
-  // --- Google / YouTube OAuth ---
+  // ============================================================
+  //  YOUTUBE / GOOGLE
+  // ============================================================
+
+  /**
+   * Get YouTube API key — from CONFIG (build-injected) or localStorage.
+   */
+  function getYouTubeApiKey() {
+    if (CONFIG.hasYouTube) return CONFIG.YOUTUBE_API_KEY;
+    return localStorage.getItem('songfactory_api_key') || '';
+  }
+
+  function getYouTubeChannelId() {
+    if (CONFIG.hasYouTubeChannel) return CONFIG.YOUTUBE_CHANNEL_ID;
+    return localStorage.getItem('songfactory_channel_id') || '';
+  }
+
+  function hasYouTubeAccess() {
+    return !!getYouTubeApiKey() || isGoogleConnected();
+  }
+
+  // --- Google OAuth (optional upgrade) ---
 
   function getGoogleClientId() {
+    if (CONFIG.hasGoogleOAuth) return CONFIG.GOOGLE_CLIENT_ID;
     return localStorage.getItem(STORAGE.googleClientId) || '';
   }
 
@@ -52,15 +81,11 @@ const Auth = (() => {
     }
   }
 
-  /**
-   * Initiate Google OAuth via popup.
-   * Uses the OAuth 2.0 implicit grant flow with a popup window.
-   */
   function connectGoogle() {
     return new Promise((resolve, reject) => {
       const clientId = getGoogleClientId();
       if (!clientId) {
-        reject(new Error('Set your Google Client ID first.'));
+        reject(new Error('Google Client ID not configured.'));
         return;
       }
 
@@ -91,7 +116,6 @@ const Auth = (() => {
         return;
       }
 
-      // Poll the popup for the redirect with token in hash
       const pollTimer = setInterval(() => {
         try {
           if (popup.closed) {
@@ -103,7 +127,6 @@ const Auth = (() => {
             }
             return;
           }
-
           const popupUrl = popup.location.href;
           if (popupUrl.startsWith(redirectUri)) {
             clearInterval(pollTimer);
@@ -113,7 +136,7 @@ const Auth = (() => {
             resolve(getGoogleUser());
           }
         } catch {
-          // Cross-origin — popup is still on Google's domain, keep polling
+          // Cross-origin — still on Google's domain
         }
       }, 200);
     });
@@ -126,17 +149,14 @@ const Auth = (() => {
     const returnedState = params.get('state');
 
     if (returnedState !== expectedState) {
-      throw new Error('OAuth state mismatch — possible CSRF.');
+      throw new Error('OAuth state mismatch.');
     }
-
     if (!accessToken) {
       throw new Error('No access token received.');
     }
 
     localStorage.setItem(STORAGE.googleToken, accessToken);
     localStorage.setItem(STORAGE.googleExpiry, String(Date.now() + expiresIn * 1000));
-
-    // Fetch user info async (fire and forget)
     _fetchGoogleUserInfo(accessToken);
   }
 
@@ -158,9 +178,6 @@ const Auth = (() => {
     }
   }
 
-  /**
-   * Also fetch the user's YouTube channel ID automatically.
-   */
   async function fetchYouTubeChannelId() {
     const token = getGoogleToken();
     if (!token) return null;
@@ -170,7 +187,6 @@ const Auth = (() => {
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!resp.ok) return null;
-
     const data = await resp.json();
     if (data.items && data.items.length > 0) {
       return {
@@ -188,17 +204,56 @@ const Auth = (() => {
     localStorage.removeItem(STORAGE.googleUser);
   }
 
-  // --- Spotify OAuth (PKCE) ---
+  // ============================================================
+  //  SPOTIFY
+  // ============================================================
 
-  function getSpotifyClientId() {
-    return localStorage.getItem(STORAGE.spotifyClientId) || '';
+  /**
+   * Spotify Client Credentials flow — NO user login needed.
+   * Uses client_id + client_secret from CONFIG to get an app-level token.
+   * Good for: search, artist data, album listings (all public data).
+   */
+  async function ensureSpotifyAppToken() {
+    // Check if we already have a valid app token
+    const existing = localStorage.getItem(STORAGE.spotifyAppToken);
+    const expiry = parseInt(localStorage.getItem(STORAGE.spotifyAppExpiry) || '0', 10);
+    if (existing && Date.now() < expiry) return existing;
+
+    if (!CONFIG.hasSpotify) return null;
+
+    const credentials = btoa(`${CONFIG.SPOTIFY_CLIENT_ID}:${CONFIG.SPOTIFY_CLIENT_SECRET}`);
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${credentials}`,
+      },
+      body: 'grant_type=client_credentials',
+    });
+
+    if (!resp.ok) return null;
+
+    const data = await resp.json();
+    localStorage.setItem(STORAGE.spotifyAppToken, data.access_token);
+    localStorage.setItem(STORAGE.spotifyAppExpiry, String(Date.now() + data.expires_in * 1000));
+    return data.access_token;
   }
 
-  function setSpotifyClientId(id) {
-    localStorage.setItem(STORAGE.spotifyClientId, id);
+  /**
+   * Get the best available Spotify token:
+   * 1. User OAuth token (if logged in)
+   * 2. App-level Client Credentials token (if secrets configured)
+   */
+  async function getSpotifyToken() {
+    // Prefer user token
+    const userToken = _getSpotifyUserToken();
+    if (userToken) return userToken;
+
+    // Fall back to app token
+    return await ensureSpotifyAppToken();
   }
 
-  function getSpotifyToken() {
+  function _getSpotifyUserToken() {
     const token = localStorage.getItem(STORAGE.spotifyToken);
     const expiry = parseInt(localStorage.getItem(STORAGE.spotifyExpiry) || '0', 10);
     if (!token || Date.now() > expiry) return null;
@@ -206,7 +261,20 @@ const Auth = (() => {
   }
 
   function isSpotifyConnected() {
-    return !!getSpotifyToken();
+    return !!_getSpotifyUserToken();
+  }
+
+  function hasSpotifyAccess() {
+    return CONFIG.hasSpotify || isSpotifyConnected();
+  }
+
+  function getSpotifyClientId() {
+    if (CONFIG.hasSpotifyClientOnly) return CONFIG.SPOTIFY_CLIENT_ID;
+    return localStorage.getItem(STORAGE.spotifyClientId) || '';
+  }
+
+  function setSpotifyClientId(id) {
+    localStorage.setItem(STORAGE.spotifyClientId, id);
   }
 
   function getSpotifyUser() {
@@ -217,13 +285,12 @@ const Auth = (() => {
     }
   }
 
-  /**
-   * Spotify OAuth 2.0 with PKCE — no client secret required.
-   */
+  // --- Spotify OAuth PKCE (optional user login) ---
+
   async function connectSpotify() {
     const clientId = getSpotifyClientId();
     if (!clientId) {
-      throw new Error('Set your Spotify Client ID first.');
+      throw new Error('Spotify Client ID not configured.');
     }
 
     const redirectUri = _getRedirectUri();
@@ -235,10 +302,7 @@ const Auth = (() => {
     const state = _randomString(32);
     sessionStorage.setItem('sf_spotify_state', state);
 
-    const scope = [
-      'user-read-private',
-      'user-read-email',
-    ].join(' ');
+    const scope = 'user-read-private user-read-email';
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -250,15 +314,9 @@ const Auth = (() => {
       code_challenge: codeChallenge,
     });
 
-    // For Spotify PKCE we redirect the whole page (not popup) because
-    // Spotify's consent screen works better as a redirect.
-    // We'll handle the callback on page load.
     window.location.href = `https://accounts.spotify.com/authorize?${params}`;
   }
 
-  /**
-   * Handle Spotify callback — called on page load if URL has ?code= param.
-   */
   async function handleSpotifyCallback() {
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
@@ -267,7 +325,6 @@ const Auth = (() => {
 
     if (!code) return false;
 
-    // Clean URL
     window.history.replaceState({}, document.title, url.pathname);
 
     if (error) {
@@ -315,9 +372,7 @@ const Auth = (() => {
     }
     localStorage.removeItem(STORAGE.spotifyCodeVerifier);
 
-    // Fetch user profile
     await _fetchSpotifyUserInfo(data.access_token);
-
     return true;
   }
 
@@ -374,32 +429,10 @@ const Auth = (() => {
     localStorage.removeItem(STORAGE.spotifyCodeVerifier);
   }
 
-  // --- DistroKid (session-based via local CLI) ---
+  // --- Spotify API (works with either token type) ---
 
-  function isDistroKidConnected() {
-    return localStorage.getItem(STORAGE.dkConnected) === 'true';
-  }
-
-  function setDistroKidConnected(connected) {
-    localStorage.setItem(STORAGE.dkConnected, String(connected));
-  }
-
-  /**
-   * Open DistroKid login in a new tab.
-   * User logs in manually, then clicks "I'm logged in" in dashboard.
-   * The local CLI server will use Chrome's user profile cookies for automation.
-   */
-  function openDistroKidLogin() {
-    window.open('https://distrokid.com/signin/', '_blank', 'noopener');
-  }
-
-  // --- Spotify API helpers ---
-
-  /**
-   * Search Spotify for artist's tracks to check release status.
-   */
   async function searchSpotifyArtist(artistName) {
-    const token = getSpotifyToken();
+    const token = await getSpotifyToken();
     if (!token) return null;
 
     const params = new URLSearchParams({
@@ -411,17 +444,13 @@ const Auth = (() => {
     const resp = await fetch(`https://api.spotify.com/v1/search?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-
     if (!resp.ok) return null;
     const data = await resp.json();
     return data.artists?.items || [];
   }
 
-  /**
-   * Get an artist's albums/singles from Spotify.
-   */
   async function getSpotifyArtistReleases(artistId) {
-    const token = getSpotifyToken();
+    const token = await getSpotifyToken();
     if (!token) return null;
 
     const params = new URLSearchParams({
@@ -434,17 +463,13 @@ const Auth = (() => {
       `https://api.spotify.com/v1/artists/${artistId}/albums?${params}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-
     if (!resp.ok) return null;
     const data = await resp.json();
     return data.items || [];
   }
 
-  /**
-   * Search Spotify for a specific track to check if it's live.
-   */
   async function searchSpotifyTrack(trackName, artistName) {
-    const token = getSpotifyToken();
+    const token = await getSpotifyToken();
     if (!token) return null;
 
     const q = `track:${trackName} artist:${artistName}`;
@@ -453,16 +478,32 @@ const Auth = (() => {
     const resp = await fetch(`https://api.spotify.com/v1/search?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-
     if (!resp.ok) return null;
     const data = await resp.json();
     return data.tracks?.items || [];
   }
 
-  // --- Utilities ---
+  // ============================================================
+  //  DISTROKID
+  // ============================================================
+
+  function isDistroKidConnected() {
+    return localStorage.getItem(STORAGE.dkConnected) === 'true';
+  }
+
+  function setDistroKidConnected(connected) {
+    localStorage.setItem(STORAGE.dkConnected, String(connected));
+  }
+
+  function openDistroKidLogin() {
+    window.open('https://distrokid.com/signin/', '_blank', 'noopener');
+  }
+
+  // ============================================================
+  //  UTILITIES
+  // ============================================================
 
   function _getRedirectUri() {
-    // Use the current page URL (without hash/query) as redirect URI
     return window.location.origin + window.location.pathname;
   }
 
@@ -482,7 +523,12 @@ const Auth = (() => {
   }
 
   return {
-    // Google
+    // YouTube
+    getYouTubeApiKey,
+    getYouTubeChannelId,
+    hasYouTubeAccess,
+
+    // Google OAuth
     getGoogleClientId,
     setGoogleClientId,
     getGoogleToken,
@@ -493,15 +539,17 @@ const Auth = (() => {
     fetchYouTubeChannelId,
 
     // Spotify
+    getSpotifyToken,
     getSpotifyClientId,
     setSpotifyClientId,
-    getSpotifyToken,
     isSpotifyConnected,
+    hasSpotifyAccess,
     getSpotifyUser,
     connectSpotify,
     handleSpotifyCallback,
     refreshSpotifyToken,
     disconnectSpotify,
+    ensureSpotifyAppToken,
     searchSpotifyArtist,
     getSpotifyArtistReleases,
     searchSpotifyTrack,

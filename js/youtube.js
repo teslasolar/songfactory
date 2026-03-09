@@ -1,7 +1,9 @@
 /**
  * YouTube Data API v3 monitor module.
- * Uses OAuth token from Auth module (no API key needed).
- * Falls back to API key if OAuth not connected.
+ *
+ * Works in two modes:
+ * 1. API Key (from CONFIG) — no login needed, reads public channel data
+ * 2. OAuth token — user signed in, auto-detects their channel
  */
 const YouTubeMonitor = (() => {
   const STORAGE_KEY = 'songfactory_videos';
@@ -75,81 +77,79 @@ const YouTubeMonitor = (() => {
   }
 
   /**
-   * Build request headers — use OAuth token if available.
+   * Build request — uses OAuth token if available, otherwise API key from CONFIG.
    */
-  function _getHeaders() {
-    const token = Auth.getGoogleToken();
-    if (token) {
-      return { Authorization: `Bearer ${token}` };
-    }
-    return {};
-  }
+  function _buildRequest(params) {
+    const headers = {};
+    const googleToken = Auth.getGoogleToken();
 
-  /**
-   * Build query params — only add API key if no OAuth token.
-   */
-  function _addAuth(params) {
-    if (!Auth.isGoogleConnected()) {
-      // Fallback: check for legacy API key
-      const legacyKey = localStorage.getItem('songfactory_api_key');
-      if (legacyKey) {
-        params.set('key', legacyKey);
+    if (googleToken) {
+      headers['Authorization'] = `Bearer ${googleToken}`;
+    } else {
+      const apiKey = Auth.getYouTubeApiKey();
+      if (apiKey) {
+        params.set('key', apiKey);
       }
     }
-    return params;
+
+    return { headers };
   }
 
-  /**
-   * Auto-detect channel from OAuth login.
-   */
   async function detectChannel() {
-    if (!Auth.isGoogleConnected()) return null;
-
-    const channel = await Auth.fetchYouTubeChannelId();
-    if (channel) {
-      saveChannel(channel);
+    if (Auth.isGoogleConnected()) {
+      const channel = await Auth.fetchYouTubeChannelId();
+      if (channel) {
+        saveChannel(channel);
+        return channel;
+      }
     }
-    return channel;
+    return null;
   }
 
   /**
-   * Fetch videos from the user's channel.
-   * Uses OAuth — gets the channel automatically from the signed-in account.
+   * Determine the channel ID to use.
+   * Priority: stored channel > CONFIG > OAuth auto-detect
    */
-  async function fetchVideos() {
-    let channelId = getStoredChannel().channelId;
+  async function _resolveChannelId() {
+    // 1. Already stored (from previous OAuth or manual)
+    const stored = getStoredChannel().channelId;
+    if (stored) return stored;
 
-    // If we have OAuth but no channel yet, auto-detect
-    if (!channelId && Auth.isGoogleConnected()) {
+    // 2. Injected via CONFIG
+    const fromConfig = Auth.getYouTubeChannelId();
+    if (fromConfig) return fromConfig;
+
+    // 3. Auto-detect via OAuth
+    if (Auth.isGoogleConnected()) {
       const ch = await detectChannel();
-      if (ch) channelId = ch.channelId;
+      if (ch) return ch.channelId;
     }
 
-    // Legacy fallback
+    return null;
+  }
+
+  async function fetchVideos() {
+    const channelId = await _resolveChannelId();
+
     if (!channelId) {
-      channelId = localStorage.getItem('songfactory_channel_id');
+      throw new Error('No channel ID available. Add YOUTUBE_CHANNEL_ID to GitHub secrets or sign in with Google.');
     }
 
-    if (!channelId && !Auth.isGoogleConnected()) {
-      throw new Error('Sign in with Google to auto-detect your channel, or set a Channel ID.');
+    if (!Auth.hasYouTubeAccess()) {
+      throw new Error('No YouTube access. Add YOUTUBE_API_KEY to GitHub secrets or sign in with Google.');
     }
 
     const params = new URLSearchParams({
       part: 'snippet',
+      channelId,
       order: 'date',
       maxResults: '25',
       type: 'video',
     });
 
-    if (channelId) {
-      params.set('channelId', channelId);
-    }
+    const { headers } = _buildRequest(params);
 
-    _addAuth(params);
-
-    const resp = await fetch(`${API_BASE}/search?${params}`, {
-      headers: _getHeaders(),
-    });
+    const resp = await fetch(`${API_BASE}/search?${params}`, { headers });
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -198,22 +198,7 @@ const YouTubeMonitor = (() => {
     return Object.values(videos).filter(v => v.status === status);
   }
 
-  // Legacy compat
-  function getConfig() {
-    return {
-      apiKey: localStorage.getItem('songfactory_api_key') || '',
-      channelId: getStoredChannel().channelId || localStorage.getItem('songfactory_channel_id') || '',
-    };
-  }
-
-  function saveConfig(apiKey, channelId) {
-    if (apiKey) localStorage.setItem('songfactory_api_key', apiKey);
-    if (channelId) localStorage.setItem('songfactory_channel_id', channelId);
-  }
-
   return {
-    getConfig,
-    saveConfig,
     getStoredChannel,
     detectChannel,
     fetchVideos,

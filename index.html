@@ -15,7 +15,7 @@
     </header>
 
     <main>
-      <!-- Auth Section -->
+      <!-- Connections -->
       <section id="auth-section" class="card">
         <h2>Connections</h2>
         <div class="auth-grid">
@@ -24,8 +24,8 @@
             <div class="auth-service-header">
               <div class="auth-service-icon">YT</div>
               <div class="auth-service-info">
-                <div class="auth-service-name">YouTube / Google</div>
-                <div class="auth-service-status" id="google-status">Not connected</div>
+                <div class="auth-service-name">YouTube</div>
+                <div class="auth-service-status" id="google-status">Checking...</div>
               </div>
             </div>
             <div class="auth-service-user hidden" id="google-user-info">
@@ -34,7 +34,7 @@
               <span class="auth-channel" id="google-channel"></span>
             </div>
             <div class="auth-service-actions">
-              <button id="btn-google-connect" class="btn btn-primary">Sign in with Google</button>
+              <button id="btn-google-connect" class="btn btn-primary hidden">Sign in with Google</button>
               <button id="btn-google-disconnect" class="btn btn-secondary hidden">Disconnect</button>
             </div>
           </div>
@@ -45,7 +45,7 @@
               <div class="auth-service-icon auth-icon-spotify">SP</div>
               <div class="auth-service-info">
                 <div class="auth-service-name">Spotify</div>
-                <div class="auth-service-status" id="spotify-status">Not connected</div>
+                <div class="auth-service-status" id="spotify-status">Checking...</div>
               </div>
             </div>
             <div class="auth-service-user hidden" id="spotify-user-info">
@@ -53,7 +53,7 @@
               <span id="spotify-username"></span>
             </div>
             <div class="auth-service-actions">
-              <button id="btn-spotify-connect" class="btn btn-spotify">Connect Spotify</button>
+              <button id="btn-spotify-connect" class="btn btn-spotify hidden">Sign in to Spotify</button>
               <button id="btn-spotify-disconnect" class="btn btn-secondary hidden">Disconnect</button>
             </div>
           </div>
@@ -75,25 +75,34 @@
           </div>
         </div>
 
-        <!-- Client ID config (collapsible) -->
+        <!-- Manual config fallback -->
         <details class="auth-config-details">
-          <summary>OAuth Client IDs</summary>
+          <summary>Manual Configuration / Client IDs</summary>
           <div class="auth-config">
             <div class="form-group">
+              <label for="manual-yt-key">YouTube API Key</label>
+              <input type="password" id="manual-yt-key" placeholder="Auto-configured from GitHub secrets">
+              <span class="form-hint">Only needed if not set in GitHub repo secrets</span>
+            </div>
+            <div class="form-group">
+              <label for="manual-channel-id">Channel ID</label>
+              <input type="text" id="manual-channel-id" placeholder="Auto-configured from GitHub secrets">
+            </div>
+            <div class="form-group">
               <label for="google-client-id">Google Client ID</label>
-              <input type="text" id="google-client-id" placeholder="xxxxxx.apps.googleusercontent.com">
-              <span class="form-hint">Create at console.cloud.google.com — OAuth 2.0 Client ID (Web app)</span>
+              <input type="text" id="google-client-id" placeholder="For optional Google Sign-In">
+              <span class="form-hint">console.cloud.google.com — OAuth 2.0 Client ID (Web app)</span>
             </div>
             <div class="form-group">
               <label for="spotify-client-id">Spotify Client ID</label>
-              <input type="text" id="spotify-client-id" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
-              <span class="form-hint">Create at developer.spotify.com — redirect URI: this page's URL</span>
+              <input type="text" id="spotify-client-id" placeholder="For optional Spotify Sign-In">
+              <span class="form-hint">developer.spotify.com — redirect URI: this page's URL</span>
             </div>
             <div class="form-group">
               <label for="local-port">Local Server Port</label>
               <input type="number" id="local-port" value="3456" min="1024" max="65535">
             </div>
-            <button id="save-client-ids" class="btn btn-primary">Save</button>
+            <button id="save-manual-config" class="btn btn-primary">Save</button>
           </div>
         </details>
       </section>
@@ -121,7 +130,7 @@
         </div>
       </section>
 
-      <!-- Spotify Releases (visible when connected) -->
+      <!-- Spotify Releases -->
       <section id="spotify-section" class="card hidden">
         <div class="section-header">
           <h2>Spotify Releases</h2>
@@ -143,7 +152,7 @@
           </div>
         </div>
         <div id="video-list" class="video-list">
-          <p class="empty-state">Sign in with Google to pull your YouTube uploads.</p>
+          <p class="empty-state">Loading...</p>
         </div>
       </section>
 
@@ -251,6 +260,7 @@
     </footer>
   </div>
 
+  <script src="js/config.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/youtube.js"></script>
   <script src="js/metadata.js"></script>
