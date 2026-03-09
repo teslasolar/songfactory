@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Song Factory Pipeline</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>SONG FACTORY PIPELINE</h1>
+      <p class="subtitle">ThomasTheSolarCryptoEngine</p>
+      <div id="connection-status" class="status-offline">Local pipeline offline</div>
+    </header>
+
+    <main>
+      <section id="config-section" class="card">
+        <h2>Configuration</h2>
+        <div class="config-form">
+          <div class="form-group">
+            <label for="api-key">YouTube API Key</label>
+            <input type="password" id="api-key" placeholder="Enter YouTube Data API v3 key">
+          </div>
+          <div class="form-group">
+            <label for="channel-id">Channel ID</label>
+            <input type="text" id="channel-id" placeholder="Enter your YouTube Channel ID">
+          </div>
+          <div class="form-group">
+            <label for="local-port">Local Server Port</label>
+            <input type="number" id="local-port" value="3456" min="1024" max="65535">
+          </div>
+          <button id="save-config" class="btn btn-primary">Save Configuration</button>
+        </div>
+      </section>
+
+      <section id="stats-section" class="card">
+        <h2>Stats</h2>
+        <div class="stats-grid">
+          <div class="stat">
+            <span class="stat-value" id="stat-total">0</span>
+            <span class="stat-label">Total Releases</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="stat-live">0</span>
+            <span class="stat-label">Live</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="stat-pending">0</span>
+            <span class="stat-label">Pending</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value" id="stat-new">0</span>
+            <span class="stat-label">New</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="videos-section" class="card">
+        <div class="section-header">
+          <h2>YouTube Uploads</h2>
+          <div class="actions">
+            <button id="btn-refresh" class="btn btn-secondary">Refresh</button>
+            <button id="btn-prepare-all" class="btn btn-primary">Prepare All New</button>
+            <button id="btn-upload-ready" class="btn btn-accent">Upload Ready</button>
+          </div>
+        </div>
+        <div id="video-list" class="video-list">
+          <p class="empty-state">Configure your YouTube API key and Channel ID to get started.</p>
+        </div>
+      </section>
+
+      <section id="detail-section" class="card hidden">
+        <div class="section-header">
+          <h2>Release Detail</h2>
+          <button id="btn-close-detail" class="btn btn-secondary">Close</button>
+        </div>
+        <div id="detail-content">
+          <div class="detail-grid">
+            <div class="detail-preview">
+              <img id="detail-thumbnail" src="" alt="Thumbnail">
+              <div id="detail-status-badge" class="badge"></div>
+            </div>
+            <div class="detail-form">
+              <div class="form-group">
+                <label for="meta-title">Song Title</label>
+                <input type="text" id="meta-title">
+              </div>
+              <div class="form-group">
+                <label for="meta-artist">Artist Name</label>
+                <input type="text" id="meta-artist" value="ThomasTheSolarCryptoEngine">
+              </div>
+              <div class="form-group">
+                <label for="meta-album">Album Title</label>
+                <input type="text" id="meta-album">
+              </div>
+              <div class="form-group">
+                <label for="meta-genre">Genre</label>
+                <select id="meta-genre">
+                  <option value="Electronic">Electronic</option>
+                  <option value="Industrial">Industrial</option>
+                  <option value="Techno">Techno</option>
+                  <option value="Indie Folk">Indie Folk</option>
+                  <option value="Experimental">Experimental</option>
+                  <option value="Hip-Hop/Rap">Hip-Hop/Rap</option>
+                  <option value="Rock">Rock</option>
+                  <option value="Pop">Pop</option>
+                  <option value="Ambient">Ambient</option>
+                  <option value="Noise">Noise</option>
+                  <option value="Punk">Punk</option>
+                  <option value="Metal">Metal</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="meta-date">Release Date</label>
+                <input type="date" id="meta-date">
+              </div>
+              <div class="form-group">
+                <label for="meta-language">Language</label>
+                <select id="meta-language">
+                  <option value="English">English</option>
+                  <option value="German">German</option>
+                  <option value="Instrumental">Instrumental</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Explicit</label>
+                <label class="toggle">
+                  <input type="checkbox" id="meta-explicit">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="form-group">
+                <label>Stores</label>
+                <div class="store-checkboxes">
+                  <label><input type="checkbox" name="store" value="spotify" checked> Spotify</label>
+                  <label><input type="checkbox" name="store" value="apple" checked> Apple Music</label>
+                  <label><input type="checkbox" name="store" value="amazon" checked> Amazon</label>
+                  <label><input type="checkbox" name="store" value="tiktok" checked> TikTok</label>
+                  <label><input type="checkbox" name="store" value="youtube_music" checked> YouTube Music</label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="meta-copyright">Copyright Holder</label>
+                <input type="text" id="meta-copyright" value="Thomas Frumkin">
+              </div>
+              <div class="form-group">
+                <label>Video Type</label>
+                <div class="type-toggle">
+                  <button class="btn btn-small type-btn active" data-type="song">Song</button>
+                  <button class="btn btn-small type-btn" data-type="skip">Skip</button>
+                </div>
+              </div>
+              <div class="detail-actions">
+                <button id="btn-save-meta" class="btn btn-primary">Save Metadata</button>
+                <button id="btn-prepare" class="btn btn-secondary">Prepare Release</button>
+                <button id="btn-upload" class="btn btn-accent">Upload to DistroKid</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Song Factory Pipeline &mdash; 510,510</p>
+    </footer>
+  </div>
+
+  <script src="js/youtube.js"></script>
+  <script src="js/metadata.js"></script>
+  <script src="js/bridge.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
