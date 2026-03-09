@@ -15,25 +15,90 @@
     </header>
 
     <main>
-      <section id="config-section" class="card">
-        <h2>Configuration</h2>
-        <div class="config-form">
-          <div class="form-group">
-            <label for="api-key">YouTube API Key</label>
-            <input type="password" id="api-key" placeholder="Enter YouTube Data API v3 key">
+      <!-- Auth Section -->
+      <section id="auth-section" class="card">
+        <h2>Connections</h2>
+        <div class="auth-grid">
+          <!-- YouTube / Google -->
+          <div class="auth-service" id="google-auth">
+            <div class="auth-service-header">
+              <div class="auth-service-icon">YT</div>
+              <div class="auth-service-info">
+                <div class="auth-service-name">YouTube / Google</div>
+                <div class="auth-service-status" id="google-status">Not connected</div>
+              </div>
+            </div>
+            <div class="auth-service-user hidden" id="google-user-info">
+              <img id="google-avatar" class="auth-avatar" src="" alt="">
+              <span id="google-username"></span>
+              <span class="auth-channel" id="google-channel"></span>
+            </div>
+            <div class="auth-service-actions">
+              <button id="btn-google-connect" class="btn btn-primary">Sign in with Google</button>
+              <button id="btn-google-disconnect" class="btn btn-secondary hidden">Disconnect</button>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="channel-id">Channel ID</label>
-            <input type="text" id="channel-id" placeholder="Enter your YouTube Channel ID">
+
+          <!-- Spotify -->
+          <div class="auth-service" id="spotify-auth">
+            <div class="auth-service-header">
+              <div class="auth-service-icon auth-icon-spotify">SP</div>
+              <div class="auth-service-info">
+                <div class="auth-service-name">Spotify</div>
+                <div class="auth-service-status" id="spotify-status">Not connected</div>
+              </div>
+            </div>
+            <div class="auth-service-user hidden" id="spotify-user-info">
+              <img id="spotify-avatar" class="auth-avatar" src="" alt="">
+              <span id="spotify-username"></span>
+            </div>
+            <div class="auth-service-actions">
+              <button id="btn-spotify-connect" class="btn btn-spotify">Connect Spotify</button>
+              <button id="btn-spotify-disconnect" class="btn btn-secondary hidden">Disconnect</button>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="local-port">Local Server Port</label>
-            <input type="number" id="local-port" value="3456" min="1024" max="65535">
+
+          <!-- DistroKid -->
+          <div class="auth-service" id="dk-auth">
+            <div class="auth-service-header">
+              <div class="auth-service-icon auth-icon-dk">DK</div>
+              <div class="auth-service-info">
+                <div class="auth-service-name">DistroKid</div>
+                <div class="auth-service-status" id="dk-status">Not connected</div>
+              </div>
+            </div>
+            <div class="auth-service-actions">
+              <button id="btn-dk-login" class="btn btn-dk">Open DistroKid Login</button>
+              <button id="btn-dk-confirm" class="btn btn-secondary">I'm Logged In</button>
+              <button id="btn-dk-disconnect" class="btn btn-secondary hidden">Disconnect</button>
+            </div>
           </div>
-          <button id="save-config" class="btn btn-primary">Save Configuration</button>
         </div>
+
+        <!-- Client ID config (collapsible) -->
+        <details class="auth-config-details">
+          <summary>OAuth Client IDs</summary>
+          <div class="auth-config">
+            <div class="form-group">
+              <label for="google-client-id">Google Client ID</label>
+              <input type="text" id="google-client-id" placeholder="xxxxxx.apps.googleusercontent.com">
+              <span class="form-hint">Create at console.cloud.google.com — OAuth 2.0 Client ID (Web app)</span>
+            </div>
+            <div class="form-group">
+              <label for="spotify-client-id">Spotify Client ID</label>
+              <input type="text" id="spotify-client-id" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+              <span class="form-hint">Create at developer.spotify.com — redirect URI: this page's URL</span>
+            </div>
+            <div class="form-group">
+              <label for="local-port">Local Server Port</label>
+              <input type="number" id="local-port" value="3456" min="1024" max="65535">
+            </div>
+            <button id="save-client-ids" class="btn btn-primary">Save</button>
+          </div>
+        </details>
       </section>
 
+      <!-- Stats -->
       <section id="stats-section" class="card">
         <h2>Stats</h2>
         <div class="stats-grid">
@@ -56,6 +121,18 @@
         </div>
       </section>
 
+      <!-- Spotify Releases (visible when connected) -->
+      <section id="spotify-section" class="card hidden">
+        <div class="section-header">
+          <h2>Spotify Releases</h2>
+          <button id="btn-spotify-refresh" class="btn btn-secondary">Check Releases</button>
+        </div>
+        <div id="spotify-releases" class="video-list">
+          <p class="empty-state">Click "Check Releases" to search for your tracks on Spotify.</p>
+        </div>
+      </section>
+
+      <!-- YouTube Uploads -->
       <section id="videos-section" class="card">
         <div class="section-header">
           <h2>YouTube Uploads</h2>
@@ -66,20 +143,25 @@
           </div>
         </div>
         <div id="video-list" class="video-list">
-          <p class="empty-state">Configure your YouTube API key and Channel ID to get started.</p>
+          <p class="empty-state">Sign in with Google to pull your YouTube uploads.</p>
         </div>
       </section>
 
+      <!-- Release Detail -->
       <section id="detail-section" class="card hidden">
         <div class="section-header">
           <h2>Release Detail</h2>
-          <button id="btn-close-detail" class="btn btn-secondary">Close</button>
+          <div class="actions">
+            <button id="btn-check-spotify" class="btn btn-spotify btn-small">Check Spotify</button>
+            <button id="btn-close-detail" class="btn btn-secondary">Close</button>
+          </div>
         </div>
         <div id="detail-content">
           <div class="detail-grid">
             <div class="detail-preview">
               <img id="detail-thumbnail" src="" alt="Thumbnail">
               <div id="detail-status-badge" class="badge"></div>
+              <div id="detail-spotify-status" class="spotify-track-status hidden"></div>
             </div>
             <div class="detail-form">
               <div class="form-group">
@@ -169,6 +251,7 @@
     </footer>
   </div>
 
+  <script src="js/auth.js"></script>
   <script src="js/youtube.js"></script>
   <script src="js/metadata.js"></script>
   <script src="js/bridge.js"></script>

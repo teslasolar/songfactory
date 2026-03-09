@@ -365,15 +365,188 @@ header h1 {
   border-color: var(--primary);
 }
 
-.config-form {
+/* Auth Section */
+.auth-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.auth-service {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.auth-service-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.auth-service-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: bold;
+  font-size: 0.7rem;
+  background: rgba(255, 0, 0, 0.15);
+  color: #ff4444;
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.auth-icon-spotify {
+  background: rgba(30, 215, 96, 0.15);
+  color: #1ed760;
+  border-color: rgba(30, 215, 96, 0.3);
+}
+
+.auth-icon-dk {
+  background: rgba(255, 167, 38, 0.15);
+  color: var(--warning);
+  border-color: rgba(255, 167, 38, 0.3);
+}
+
+.auth-service-name {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.auth-service-status {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.auth-service-status.auth-connected {
+  color: var(--success);
+}
+
+.auth-service-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background: var(--surface);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.auth-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.auth-channel {
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  margin-left: auto;
+}
+
+.auth-service-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-spotify {
+  background: rgba(30, 215, 96, 0.15);
+  border-color: #1ed760;
+  color: #1ed760;
+}
+
+.btn-spotify:hover {
+  background: rgba(30, 215, 96, 0.25);
+}
+
+.btn-dk {
+  background: rgba(255, 167, 38, 0.15);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.btn-dk:hover {
+  background: rgba(255, 167, 38, 0.25);
+}
+
+.auth-config-details {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.auth-config-details summary {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.auth-config {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
+  margin-top: 0.75rem;
   align-items: end;
 }
 
-.config-form .form-group:first-child {
-  grid-column: 1 / -1;
+.auth-config .form-group:first-child,
+.auth-config .form-group:nth-child(2) {
+  grid-column: span 1;
+}
+
+.form-hint {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 0.25rem;
+}
+
+/* Spotify track status */
+.spotify-track-status {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: var(--surface);
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.spotify-track-status a {
+  color: #1ed760;
+  text-decoration: none;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.spotify-live {
+  color: #1ed760;
+  font-family: var(--font-mono);
+  font-weight: bold;
+  font-size: 0.7rem;
+}
+
+.spotify-not-found {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.spotify-pop {
+  display: block;
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  margin-top: 0.25rem;
 }
 
 .store-checkboxes {
@@ -480,7 +653,11 @@ footer {
     grid-template-columns: 1fr;
   }
 
-  .config-form {
+  .auth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-config {
     grid-template-columns: 1fr;
   }
 

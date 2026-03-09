@@ -1,30 +1,56 @@
 /**
  * Dashboard UI controller.
- * Wires up the YouTube monitor, metadata parser, and bridge modules.
+ * Wires up Auth, YouTube monitor, metadata parser, and bridge modules.
  */
 (() => {
   let selectedVideoId = null;
-  let statusPollInterval = null;
 
   // --- DOM refs ---
   const els = {
-    apiKey: document.getElementById('api-key'),
-    channelId: document.getElementById('channel-id'),
-    localPort: document.getElementById('local-port'),
-    saveConfig: document.getElementById('save-config'),
     connectionStatus: document.getElementById('connection-status'),
+    // Auth
+    googleClientId: document.getElementById('google-client-id'),
+    spotifyClientId: document.getElementById('spotify-client-id'),
+    localPort: document.getElementById('local-port'),
+    saveClientIds: document.getElementById('save-client-ids'),
+    googleStatus: document.getElementById('google-status'),
+    spotifyStatus: document.getElementById('spotify-status'),
+    dkStatus: document.getElementById('dk-status'),
+    googleUserInfo: document.getElementById('google-user-info'),
+    googleAvatar: document.getElementById('google-avatar'),
+    googleUsername: document.getElementById('google-username'),
+    googleChannel: document.getElementById('google-channel'),
+    spotifyUserInfo: document.getElementById('spotify-user-info'),
+    spotifyAvatar: document.getElementById('spotify-avatar'),
+    spotifyUsername: document.getElementById('spotify-username'),
+    btnGoogleConnect: document.getElementById('btn-google-connect'),
+    btnGoogleDisconnect: document.getElementById('btn-google-disconnect'),
+    btnSpotifyConnect: document.getElementById('btn-spotify-connect'),
+    btnSpotifyDisconnect: document.getElementById('btn-spotify-disconnect'),
+    btnDkLogin: document.getElementById('btn-dk-login'),
+    btnDkConfirm: document.getElementById('btn-dk-confirm'),
+    btnDkDisconnect: document.getElementById('btn-dk-disconnect'),
+    // Stats
     statTotal: document.getElementById('stat-total'),
     statLive: document.getElementById('stat-live'),
     statPending: document.getElementById('stat-pending'),
     statNew: document.getElementById('stat-new'),
+    // Spotify section
+    spotifySection: document.getElementById('spotify-section'),
+    spotifyReleases: document.getElementById('spotify-releases'),
+    btnSpotifyRefresh: document.getElementById('btn-spotify-refresh'),
+    // Videos
     videoList: document.getElementById('video-list'),
     btnRefresh: document.getElementById('btn-refresh'),
     btnPrepareAll: document.getElementById('btn-prepare-all'),
     btnUploadReady: document.getElementById('btn-upload-ready'),
+    // Detail
     detailSection: document.getElementById('detail-section'),
     btnCloseDetail: document.getElementById('btn-close-detail'),
+    btnCheckSpotify: document.getElementById('btn-check-spotify'),
     detailThumbnail: document.getElementById('detail-thumbnail'),
     detailStatusBadge: document.getElementById('detail-status-badge'),
+    detailSpotifyStatus: document.getElementById('detail-spotify-status'),
     metaTitle: document.getElementById('meta-title'),
     metaArtist: document.getElementById('meta-artist'),
     metaAlbum: document.getElementById('meta-album'),
@@ -39,24 +65,40 @@
   };
 
   // --- Init ---
-  function init() {
-    loadConfig();
+  async function init() {
+    // Handle Spotify OAuth callback if present
+    const spotifyHandled = await Auth.handleSpotifyCallback();
+    if (spotifyHandled) {
+      showNotice('Spotify connected!');
+    }
+
+    loadClientIds();
+    updateAuthUI();
     bindEvents();
     renderVideoList();
     updateStats();
     pollConnectionStatus();
-    statusPollInterval = setInterval(pollConnectionStatus, 15000);
+    setInterval(pollConnectionStatus, 15000);
   }
 
-  function loadConfig() {
-    const config = YouTubeMonitor.getConfig();
-    els.apiKey.value = config.apiKey;
-    els.channelId.value = config.channelId;
+  function loadClientIds() {
+    els.googleClientId.value = Auth.getGoogleClientId();
+    els.spotifyClientId.value = Auth.getSpotifyClientId();
     els.localPort.value = localStorage.getItem('songfactory_port') || '3456';
   }
 
   function bindEvents() {
-    els.saveConfig.addEventListener('click', handleSaveConfig);
+    // Auth
+    els.saveClientIds.addEventListener('click', handleSaveClientIds);
+    els.btnGoogleConnect.addEventListener('click', handleGoogleConnect);
+    els.btnGoogleDisconnect.addEventListener('click', handleGoogleDisconnect);
+    els.btnSpotifyConnect.addEventListener('click', handleSpotifyConnect);
+    els.btnSpotifyDisconnect.addEventListener('click', handleSpotifyDisconnect);
+    els.btnDkLogin.addEventListener('click', () => Auth.openDistroKidLogin());
+    els.btnDkConfirm.addEventListener('click', handleDkConfirm);
+    els.btnDkDisconnect.addEventListener('click', handleDkDisconnect);
+
+    // Videos
     els.btnRefresh.addEventListener('click', handleRefresh);
     els.btnPrepareAll.addEventListener('click', handlePrepareAll);
     els.btnUploadReady.addEventListener('click', handleUploadReady);
@@ -69,7 +111,11 @@
     els.btnPrepare.addEventListener('click', handlePrepare);
     els.btnUpload.addEventListener('click', handleUpload);
 
-    // Type toggle buttons
+    // Spotify
+    els.btnSpotifyRefresh.addEventListener('click', handleSpotifyRefreshReleases);
+    els.btnCheckSpotify.addEventListener('click', handleCheckTrackOnSpotify);
+
+    // Type toggle
     document.querySelectorAll('.type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
@@ -78,11 +124,128 @@
     });
   }
 
-  // --- Config ---
-  function handleSaveConfig() {
-    YouTubeMonitor.saveConfig(els.apiKey.value.trim(), els.channelId.value.trim());
+  // --- Auth handlers ---
+
+  function handleSaveClientIds() {
+    Auth.setGoogleClientId(els.googleClientId.value.trim());
+    Auth.setSpotifyClientId(els.spotifyClientId.value.trim());
     Bridge.setPort(els.localPort.value.trim());
-    showNotice('Configuration saved.');
+    showNotice('Client IDs saved.');
+  }
+
+  async function handleGoogleConnect() {
+    els.btnGoogleConnect.disabled = true;
+    els.btnGoogleConnect.textContent = 'Connecting...';
+    try {
+      await Auth.connectGoogle();
+      // Auto-detect channel
+      await YouTubeMonitor.detectChannel();
+      updateAuthUI();
+      showNotice('YouTube connected!');
+      // Auto-refresh videos
+      handleRefresh();
+    } catch (err) {
+      showNotice('Google auth failed: ' + err.message, true);
+    } finally {
+      els.btnGoogleConnect.disabled = false;
+      els.btnGoogleConnect.textContent = 'Sign in with Google';
+    }
+  }
+
+  function handleGoogleDisconnect() {
+    Auth.disconnectGoogle();
+    updateAuthUI();
+    showNotice('YouTube disconnected.');
+  }
+
+  async function handleSpotifyConnect() {
+    try {
+      await Auth.connectSpotify();
+      // Page will redirect — won't reach here
+    } catch (err) {
+      showNotice('Spotify auth failed: ' + err.message, true);
+    }
+  }
+
+  function handleSpotifyDisconnect() {
+    Auth.disconnectSpotify();
+    updateAuthUI();
+    showNotice('Spotify disconnected.');
+  }
+
+  function handleDkConfirm() {
+    Auth.setDistroKidConnected(true);
+    updateAuthUI();
+    showNotice('DistroKid marked as connected.');
+  }
+
+  function handleDkDisconnect() {
+    Auth.setDistroKidConnected(false);
+    updateAuthUI();
+    showNotice('DistroKid disconnected.');
+  }
+
+  function updateAuthUI() {
+    // Google
+    if (Auth.isGoogleConnected()) {
+      els.googleStatus.textContent = 'Connected';
+      els.googleStatus.classList.add('auth-connected');
+      els.btnGoogleConnect.classList.add('hidden');
+      els.btnGoogleDisconnect.classList.remove('hidden');
+
+      const user = Auth.getGoogleUser();
+      const channel = YouTubeMonitor.getStoredChannel();
+      if (user) {
+        els.googleUserInfo.classList.remove('hidden');
+        els.googleAvatar.src = user.picture || '';
+        els.googleUsername.textContent = user.name || '';
+        els.googleChannel.textContent = channel.channelTitle ? `Channel: ${channel.channelTitle}` : '';
+      }
+    } else {
+      els.googleStatus.textContent = 'Not connected';
+      els.googleStatus.classList.remove('auth-connected');
+      els.btnGoogleConnect.classList.remove('hidden');
+      els.btnGoogleDisconnect.classList.add('hidden');
+      els.googleUserInfo.classList.add('hidden');
+    }
+
+    // Spotify
+    if (Auth.isSpotifyConnected()) {
+      els.spotifyStatus.textContent = 'Connected';
+      els.spotifyStatus.classList.add('auth-connected');
+      els.btnSpotifyConnect.classList.add('hidden');
+      els.btnSpotifyDisconnect.classList.remove('hidden');
+      els.spotifySection.classList.remove('hidden');
+
+      const user = Auth.getSpotifyUser();
+      if (user) {
+        els.spotifyUserInfo.classList.remove('hidden');
+        els.spotifyAvatar.src = user.picture || '';
+        els.spotifyUsername.textContent = user.name || '';
+      }
+    } else {
+      els.spotifyStatus.textContent = 'Not connected';
+      els.spotifyStatus.classList.remove('auth-connected');
+      els.btnSpotifyConnect.classList.remove('hidden');
+      els.btnSpotifyDisconnect.classList.add('hidden');
+      els.spotifyUserInfo.classList.add('hidden');
+      els.spotifySection.classList.add('hidden');
+    }
+
+    // DistroKid
+    if (Auth.isDistroKidConnected()) {
+      els.dkStatus.textContent = 'Connected';
+      els.dkStatus.classList.add('auth-connected');
+      els.btnDkLogin.classList.add('hidden');
+      els.btnDkConfirm.classList.add('hidden');
+      els.btnDkDisconnect.classList.remove('hidden');
+    } else {
+      els.dkStatus.textContent = 'Not connected';
+      els.dkStatus.classList.remove('auth-connected');
+      els.btnDkLogin.classList.remove('hidden');
+      els.btnDkConfirm.classList.remove('hidden');
+      els.btnDkDisconnect.classList.add('hidden');
+    }
   }
 
   // --- Connection status ---
@@ -92,7 +255,7 @@
       els.connectionStatus.textContent = 'Local pipeline online';
       els.connectionStatus.className = 'status-online';
     } else {
-      els.connectionStatus.textContent = 'Local pipeline offline — start song-factory serve';
+      els.connectionStatus.textContent = 'Local pipeline offline — start: cd cli && node server.js';
       els.connectionStatus.className = 'status-offline';
     }
   }
@@ -121,7 +284,10 @@
     );
 
     if (sorted.length === 0) {
-      els.videoList.innerHTML = '<p class="empty-state">No videos yet. Click Refresh to fetch from YouTube.</p>';
+      const msg = Auth.isGoogleConnected()
+        ? 'No videos yet. Click Refresh to fetch from YouTube.'
+        : 'Sign in with Google to pull your YouTube uploads.';
+      els.videoList.innerHTML = `<p class="empty-state">${msg}</p>`;
       return;
     }
 
@@ -141,7 +307,6 @@
       `;
     }).join('');
 
-    // Bind click events
     els.videoList.querySelectorAll('.video-item').forEach(el => {
       el.addEventListener('click', () => selectVideo(el.dataset.id));
     });
@@ -153,14 +318,12 @@
     const video = videos[videoId];
     if (!video) return;
 
-    // Generate metadata if not already done
     let meta = YouTubeMonitor.getVideoMetadata(videoId);
     if (!meta) {
       meta = MetadataParser.generateMetadata(video);
       YouTubeMonitor.setVideoMetadata(videoId, meta);
     }
 
-    // Fill detail form
     els.detailThumbnail.src = video.thumbnail;
     els.detailStatusBadge.textContent = video.status;
     els.detailStatusBadge.className = 'badge ' + getBadgeClass(video.status);
@@ -172,13 +335,12 @@
     els.metaLanguage.value = meta.language || 'English';
     els.metaExplicit.checked = meta.explicit;
     els.metaCopyright.value = meta.copyright_holder;
+    els.detailSpotifyStatus.classList.add('hidden');
 
-    // Set stores
     document.querySelectorAll('input[name="store"]').forEach(cb => {
       cb.checked = (meta.stores || []).includes(cb.value);
     });
 
-    // Set type toggle
     document.querySelectorAll('.type-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.type === video.type);
     });
@@ -251,6 +413,11 @@
       return;
     }
 
+    if (!Auth.isDistroKidConnected()) {
+      showNotice('Connect to DistroKid first.', true);
+      return;
+    }
+
     YouTubeMonitor.setVideoStatus(selectedVideoId, 'UPLOADING');
     renderVideoList();
     updateStats();
@@ -308,6 +475,11 @@
       return;
     }
 
+    if (!Auth.isDistroKidConnected()) {
+      showNotice('Connect to DistroKid first.', true);
+      return;
+    }
+
     for (const video of readyVideos) {
       const meta = YouTubeMonitor.getVideoMetadata(video.videoId);
       if (!meta) continue;
@@ -328,7 +500,100 @@
       updateStats();
     }
 
-    showNotice(`Upload batch complete.`);
+    showNotice('Upload batch complete.');
+  }
+
+  // --- Spotify integration ---
+
+  async function handleSpotifyRefreshReleases() {
+    if (!Auth.isSpotifyConnected()) {
+      showNotice('Connect Spotify first.', true);
+      return;
+    }
+
+    els.btnSpotifyRefresh.disabled = true;
+    els.btnSpotifyRefresh.textContent = 'Searching...';
+
+    try {
+      const artists = await Auth.searchSpotifyArtist('ThomasTheSolarCryptoEngine');
+      if (!artists || artists.length === 0) {
+        els.spotifyReleases.innerHTML = '<p class="empty-state">Artist not found on Spotify yet.</p>';
+        return;
+      }
+
+      const artist = artists[0];
+      const releases = await Auth.getSpotifyArtistReleases(artist.id);
+
+      if (!releases || releases.length === 0) {
+        els.spotifyReleases.innerHTML = '<p class="empty-state">No releases found on Spotify.</p>';
+        return;
+      }
+
+      // Cross-reference with YouTube videos to auto-mark as LIVE
+      const videos = YouTubeMonitor.getAllVideos();
+      for (const vid of Object.values(videos)) {
+        const meta = YouTubeMonitor.getVideoMetadata(vid.videoId);
+        if (!meta) continue;
+        const match = releases.find(r =>
+          r.name.toLowerCase().includes(meta.song_title.toLowerCase()) ||
+          meta.song_title.toLowerCase().includes(r.name.toLowerCase())
+        );
+        if (match && vid.status !== 'LIVE') {
+          YouTubeMonitor.setVideoStatus(vid.videoId, 'LIVE');
+        }
+      }
+
+      els.spotifyReleases.innerHTML = releases.map(r => `
+        <div class="video-item">
+          <img class="video-thumb" src="${escapeHtml(r.images?.[r.images.length - 1]?.url || '')}" alt="" loading="lazy">
+          <div class="video-info">
+            <div class="video-title">${escapeHtml(r.name)}</div>
+            <div class="video-date">${r.release_date} &middot; ${r.album_type}</div>
+          </div>
+          <span class="badge badge-live">LIVE</span>
+        </div>
+      `).join('');
+
+      renderVideoList();
+      updateStats();
+      showNotice(`Found ${releases.length} releases on Spotify.`);
+    } catch (err) {
+      showNotice('Spotify error: ' + err.message, true);
+    } finally {
+      els.btnSpotifyRefresh.disabled = false;
+      els.btnSpotifyRefresh.textContent = 'Check Releases';
+    }
+  }
+
+  async function handleCheckTrackOnSpotify() {
+    if (!selectedVideoId || !Auth.isSpotifyConnected()) return;
+
+    const meta = YouTubeMonitor.getVideoMetadata(selectedVideoId);
+    if (!meta) return;
+
+    els.btnCheckSpotify.disabled = true;
+    try {
+      const tracks = await Auth.searchSpotifyTrack(meta.song_title, meta.artist_name);
+      if (tracks && tracks.length > 0) {
+        const track = tracks[0];
+        els.detailSpotifyStatus.innerHTML = `
+          <span class="spotify-live">LIVE ON SPOTIFY</span>
+          <a href="${track.external_urls?.spotify || '#'}" target="_blank" rel="noopener">${escapeHtml(track.name)}</a>
+          <span class="spotify-pop">Popularity: ${track.popularity}/100</span>
+        `;
+        els.detailSpotifyStatus.classList.remove('hidden');
+        YouTubeMonitor.setVideoStatus(selectedVideoId, 'LIVE');
+        renderVideoList();
+        updateStats();
+      } else {
+        els.detailSpotifyStatus.innerHTML = '<span class="spotify-not-found">Not found on Spotify yet</span>';
+        els.detailSpotifyStatus.classList.remove('hidden');
+      }
+    } catch (err) {
+      showNotice('Spotify search failed: ' + err.message, true);
+    } finally {
+      els.btnCheckSpotify.disabled = false;
+    }
   }
 
   // --- Stats ---
@@ -344,21 +609,19 @@
 
   // --- Helpers ---
   function getBadgeClass(status) {
-    const map = {
+    return {
       'NEW': 'badge-new',
       'PREPARING': 'badge-preparing',
       'READY': 'badge-ready',
       'UPLOADING': 'badge-uploading',
       'LIVE': 'badge-live',
       'SKIP': 'badge-skip',
-    };
-    return map[status] || 'badge-new';
+    }[status] || 'badge-new';
   }
 
   function formatDate(dateStr) {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
   function escapeHtml(str) {
@@ -368,7 +631,6 @@
   }
 
   function showNotice(msg, isError = false) {
-    // Simple notification — insert at top of app
     const existing = document.querySelector('.notice');
     if (existing) existing.remove();
 
@@ -386,6 +648,5 @@
     setTimeout(() => notice.remove(), 4000);
   }
 
-  // Boot
   document.addEventListener('DOMContentLoaded', init);
 })();
